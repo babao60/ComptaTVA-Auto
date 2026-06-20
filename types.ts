@@ -3,7 +3,15 @@ export enum ExpenseCategory {
   CONSUMABLE = 'Consommable',
   SERVICE = 'Service',
   ASSET = 'Immobilisation', // Materiel
-  IGNORED = 'Ignoré' // For La Poste etc
+  IGNORED = 'Ignoré', // For La Poste etc
+  UNCATEGORIZED = 'À classer'
+}
+
+export interface CustomRule {
+  id: string;
+  keyword: string;
+  category: ExpenseCategory;
+  taxMode: TaxMode;
 }
 
 export enum TaxMode {

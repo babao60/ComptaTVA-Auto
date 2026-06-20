@@ -7,9 +7,13 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.14.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "react-dom": "^19.2.1",
     "react": "^19.2.1",
     "lucide-react": "^0.556.0",

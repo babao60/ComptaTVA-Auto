@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import { ExpenseCategory, RawCsvRow, TaxMode, Transaction, AmazonSale } from '../types';
+import { ExpenseCategory, RawCsvRow, TaxMode, Transaction, AmazonSale, CustomRule } from '../types';
 
 const parseAmount = (val: string): number => {
   if (!val) return 0;
@@ -9,10 +9,19 @@ const parseAmount = (val: string): number => {
 };
 
 // Initial Logic to guess category based on user rules
-const categorizeTransaction = (row: RawCsvRow, tva: number, amountHT: number): { category: ExpenseCategory, taxMode: TaxMode } => {
+const categorizeTransaction = (row: RawCsvRow, tva: number, amountHT: number, rules: CustomRule[]): { category: ExpenseCategory, taxMode: TaxMode } => {
   const name = (row['Nom de la contrepartie'] || '').toLowerCase();
   const desc = (row['Libellé'] || '').toLowerCase();
   const comment = (row['Commentaire'] || '').toLowerCase();
+
+  // Check Custom Rules first
+  for (const rule of rules) {
+    const keyword = rule.keyword.toLowerCase();
+    if (name.includes(keyword) || desc.includes(keyword)) {
+      // Rule matched!
+      return { category: rule.category, taxMode: rule.taxMode };
+    }
+  }
 
   // Rule 1: Ignore list 
   // - La Poste (Exonerated)
@@ -62,12 +71,12 @@ const categorizeTransaction = (row: RawCsvRow, tva: number, amountHT: number): {
   // Rule 4: Consumables (Default for everything else like Amazon, Atome3D, 3djack, material suppliers)
   // Logic: If it's not ignored, not a service, and not explicitly marked as asset, it's a consumable.
   return { 
-    category: ExpenseCategory.CONSUMABLE, 
+    category: ExpenseCategory.UNCATEGORIZED, 
     taxMode: detectedTaxMode 
   };
 };
 
-export const parseCSV = (file: File): Promise<Transaction[]> => {
+export const parseCSV = (file: File, rules: CustomRule[] = []): Promise<Transaction[]> => {
   return new Promise((resolve, reject) => {
     Papa.parse<RawCsvRow>(file, {
       header: true,
@@ -87,7 +96,7 @@ export const parseCSV = (file: File): Promise<Transaction[]> => {
           const amountTVA = parseAmount(row['Montant de TVA total']);
           
           // Determine logic
-          const { category, taxMode } = categorizeTransaction(row, amountTVA, amountHT);
+          const { category, taxMode } = categorizeTransaction(row, amountTVA, amountHT, rules);
 
           // Extract Invoice Title (usually Col V/W in Shine exports)
           // Added 'Pièces' as requested by user

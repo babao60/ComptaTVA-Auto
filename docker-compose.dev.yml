@@ -1,0 +1,12 @@
+services:
+  compta-tva-app-dev:
+    build: 
+      context: .
+      target: build
+    container_name: compta-tva-app-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev

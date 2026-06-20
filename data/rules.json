@@ -1,0 +1,116 @@
+[
+  {
+    "id": "1781971173258",
+    "keyword": "winkle",
+    "category": "Consommable",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "1781971184558",
+    "keyword": "3djake",
+    "category": "Consommable",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "1781971193006",
+    "keyword": "anthropic",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "1781971212907",
+    "keyword": "sp polymaker eu wholes",
+    "category": "Consommable",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "1781971223442",
+    "keyword": "eu.store.bambulab.com",
+    "category": "Consommable",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17819765120044401",
+    "keyword": "claude.ai subscription",
+    "category": "Service",
+    "taxMode": "AUTOLIQUIDATION"
+  },
+  {
+    "id": "17819765120045614",
+    "keyword": "google*workspace 3dmat",
+    "category": "Service",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17819765120049334",
+    "keyword": "esun3dstoreeu",
+    "category": "Consommable",
+    "taxMode": "NORMAL"
+  },
+  {
+    "id": "17819765120041562",
+    "keyword": "urssaf de picardie",
+    "category": "Ignoré",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17819765120041912",
+    "keyword": "amazon payments",
+    "category": "Consommable",
+    "taxMode": "AUTOLIQUIDATION"
+  },
+  {
+    "id": "17819765120048896",
+    "keyword": "la poste.fr",
+    "category": "Ignoré",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17819765120044937",
+    "keyword": "amazon eu sarl",
+    "category": "Consommable",
+    "taxMode": "NORMAL"
+  },
+  {
+    "id": "17819765120040428",
+    "keyword": "shine",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17819765120046591",
+    "keyword": "shopify* 531852889",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17819765120048036",
+    "keyword": "direction générale des finances public",
+    "category": "Ignoré",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17819765120045452",
+    "keyword": "ted plus",
+    "category": "Consommable",
+    "taxMode": "NORMAL"
+  },
+  {
+    "id": "17819765120049183",
+    "keyword": "google one",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17819765120042531",
+    "keyword": "free mobile",
+    "category": "Ignoré",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17819765120049231",
+    "keyword": "jerome heude",
+    "category": "Ignoré",
+    "taxMode": "NORMAL"
+  }
+]

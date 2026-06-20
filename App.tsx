@@ -1,9 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { parseCSV, parseAmazonCSV } from './utils/csvParser';
 import { analyzeBatchInvoices } from './utils/pdfParser'; // Import de la nouvelle fonction
-import { Transaction, ExpenseCategory, TaxMode, AmazonSale, InvoiceData, InvoiceCategoryType, InvoiceSummary } from './types';
+import { Transaction, ExpenseCategory, TaxMode, AmazonSale, InvoiceData, InvoiceCategoryType, InvoiceSummary, CustomRule } from './types';
 import { SummaryCard } from './components/SummaryCard';
 import { FileUploader } from './components/FileUploader';
 import { FileSpreadsheet, RotateCcw, Download, FileText, ShoppingCart, CreditCard, TrendingUp, ExternalLink, Files, AlertTriangle, ChevronDown } from 'lucide-react';
@@ -34,6 +34,44 @@ function App() {
   const [showAdjustments, setShowAdjustments] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
 
+  // Custom Rules State
+  const [rules, setRules] = useState<CustomRule[]>([]);
+
+  // Load rules from API on startup
+  useEffect(() => {
+    fetch('/api/rules')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setRules(data);
+      })
+      .catch(err => console.error("Error loading rules:", err));
+  }, []);
+
+  // Save rules to API whenever they change
+  useEffect(() => {
+    // Only save if rules is not empty, to prevent overwriting on first load
+    // Actually, to correctly sync, we should only call save when rules are modified by user actions.
+    // A better approach is to create a function saveRulesToApi that is called inside addRule and removeRule.
+  }, [rules]);
+
+  const saveRulesToApi = async (newRules: CustomRule[]) => {
+    try {
+      await fetch('/api/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRules)
+      });
+    } catch (err) {
+      console.error("Error saving rules:", err);
+    }
+  };
+
+  // Show Rules Modal State
+  const [showRulesModal, setShowRulesModal] = useState(false);
+
+  // AI Loading State
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
   // --- HANDLERS ---
 
   const handleFileUpload = async (files: FileList) => {
@@ -41,7 +79,7 @@ function App() {
     setFileName(`${files.length} fichier(s)`);
     try {
       if (viewMode === 'EXPENSES') {
-        const data = await parseCSV(files[0]);
+        const data = await parseCSV(files[0], rules);
         setTransactions(data);
         setFileName(files[0].name);
       } else if (viewMode === 'SALES') {
@@ -75,11 +113,106 @@ function App() {
     }
   };
 
+  const addRule = (keyword: string, category: ExpenseCategory, taxMode: TaxMode) => {
+    const newRule: CustomRule = {
+      id: Date.now().toString(),
+      keyword: keyword.toLowerCase(),
+      category,
+      taxMode
+    };
+    const newRules = [...rules, newRule];
+    setRules(newRules);
+    saveRulesToApi(newRules);
+    alert(`Règle ajoutée : "${keyword}" sera maintenant classé en ${category} (${taxMode})`);
+  };
+
+  const removeRule = (id: string) => {
+    if (confirm('Supprimer cette règle ?')) {
+      const newRules = rules.filter(r => r.id !== id);
+      setRules(newRules);
+      saveRulesToApi(newRules);
+    }
+  };
+
+  const memorizeAll = () => {
+    // Find all transactions that have been categorized (not UNCATEGORIZED and not IGNORED for rules?)
+    // Actually, IGNORED is a valid rule category. UNCATEGORIZED is the only invalid one.
+    const validTransactions = transactions.filter(t => t.category !== ExpenseCategory.UNCATEGORIZED);
+    
+    // Build new rules from them, avoiding duplicates
+    let addedCount = 0;
+    const rulesToAdd: CustomRule[] = [];
+    
+    validTransactions.forEach(t => {
+      const keyword = t.counterparty.toLowerCase();
+      // Check if rule already exists
+      if (!rules.some(r => r.keyword === keyword) && !rulesToAdd.some(r => r.keyword === keyword)) {
+        rulesToAdd.push({
+          id: Date.now().toString() + Math.random().toString().slice(2, 6),
+          keyword,
+          category: t.category,
+          taxMode: t.taxMode
+        });
+        addedCount++;
+      }
+    });
+
+    if (addedCount > 0) {
+      const newRules = [...rules, ...rulesToAdd];
+      setRules(newRules);
+      saveRulesToApi(newRules);
+      alert(`${addedCount} nouvelle(s) règle(s) enregistrée(s) avec succès !`);
+    } else {
+      alert("Aucune nouvelle règle à mémoriser (elles existent déjà ou aucune transaction n'a été classée).");
+    }
+  };
+
+  const categorizeWithAI = async () => {
+    // Get uncategorized transactions
+    const uncategorized = transactions.filter(t => t.category === ExpenseCategory.UNCATEGORIZED);
+    if (uncategorized.length === 0) {
+      alert("Aucune transaction à classer !");
+      return;
+    }
+
+    setIsAiLoading(true);
+    try {
+      const response = await fetch('/api/ai/categorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions: uncategorized })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Erreur de l'API");
+      }
+
+      const results = await response.json();
+      
+      // Update transactions state with AI results
+      setTransactions(prev => prev.map(t => {
+        const aiSuggestion = results.find((r: any) => r.id === t.id);
+        if (aiSuggestion) {
+          return { ...t, category: aiSuggestion.category, taxMode: aiSuggestion.taxMode };
+        }
+        return t;
+      }));
+
+      alert("L'IA a terminé son analyse. Veuillez vérifier les propositions puis cliquez sur 'Tout Mémoriser' si vous êtes d'accord.");
+    } catch (error: any) {
+      alert(`Erreur avec l'IA: ${error.message}`);
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   // --- MEMOS & STATS ---
 
   // EXPENSES STATS
   const expenseStats = useMemo(() => {
     const initial = {
+      uncategorized: { normal: { ht: 0, tva: 0, count: 0 }, auto: { ht: 0, tva: 0, count: 0 } },
       consommable: { normal: { ht: 0, tva: 0, count: 0 }, auto: { ht: 0, tva: 0, count: 0 } },
       service: { normal: { ht: 0, tva: 0, count: 0 }, auto: { ht: 0, tva: 0, count: 0 } },
       asset: { normal: { ht: 0, tva: 0, count: 0 }, auto: { ht: 0, tva: 0, count: 0 } },
@@ -90,10 +223,11 @@ function App() {
         acc.ignored.ht += t.amountHT; acc.ignored.tva += t.amountTVA; acc.ignored.count += 1;
         return acc;
       }
-      let catKey: 'consommable' | 'service' | 'asset';
+      let catKey: 'consommable' | 'service' | 'asset' | 'uncategorized';
       if (t.category === ExpenseCategory.CONSUMABLE) catKey = 'consommable';
       else if (t.category === ExpenseCategory.SERVICE) catKey = 'service';
       else if (t.category === ExpenseCategory.ASSET) catKey = 'asset';
+      else if (t.category === ExpenseCategory.UNCATEGORIZED) catKey = 'uncategorized';
       else return acc;
 
       const targetStat = acc[catKey];
@@ -459,10 +593,11 @@ function App() {
 
   // Helpers
   const getRowColor = (t: Transaction, isIgnored: boolean) => {
-    if (isIgnored) return 'bg-slate-200 text-slate-500';
-    if (t.category === ExpenseCategory.CONSUMABLE) return t.taxMode === TaxMode.NORMAL ? 'bg-sky-200 hover:bg-sky-300' : 'bg-sky-50 hover:bg-sky-100';
-    if (t.category === ExpenseCategory.SERVICE) return t.taxMode === TaxMode.NORMAL ? 'bg-fuchsia-200 hover:bg-fuchsia-300' : 'bg-fuchsia-50 hover:bg-fuchsia-100';
-    if (t.category === ExpenseCategory.ASSET) return t.taxMode === TaxMode.NORMAL ? 'bg-emerald-200 hover:bg-emerald-300' : 'bg-emerald-50 hover:bg-emerald-100';
+    if (isIgnored) return 'bg-slate-100 text-slate-400';
+    if (t.category === ExpenseCategory.UNCATEGORIZED) return 'bg-slate-200 hover:bg-slate-300';
+    if (t.category === ExpenseCategory.CONSUMABLE) return t.taxMode === TaxMode.NORMAL ? 'bg-sky-300 hover:bg-sky-400' : 'bg-sky-100 hover:bg-sky-200';
+    if (t.category === ExpenseCategory.SERVICE) return t.taxMode === TaxMode.NORMAL ? 'bg-fuchsia-300 hover:bg-fuchsia-400' : 'bg-fuchsia-100 hover:bg-fuchsia-200';
+    if (t.category === ExpenseCategory.ASSET) return t.taxMode === TaxMode.NORMAL ? 'bg-emerald-300 hover:bg-emerald-400' : 'bg-emerald-100 hover:bg-emerald-200';
     return 'bg-white';
   };
 
@@ -533,12 +668,15 @@ function App() {
           </div>
           
           <div className="flex items-center bg-slate-100 p-1 rounded-lg">
-            <button onClick={() => setViewMode('EXPENSES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'EXPENSES' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Dépenses (CSV)</button>
-            <button onClick={() => setViewMode('SALES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'SALES' ? 'bg-white text-yellow-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Ventes (Amazon)</button>
-            <button onClick={() => setViewMode('INVOICES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'INVOICES' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Factures Amazon (PDF)</button>
+            <button onClick={() => setViewMode('EXPENSES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'EXPENSES' ? 'bg-white text-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.3)] border-sky-500/50' : 'text-slate-500 hover:text-slate-700'}`}>Dépenses (CSV)</button>
+            <button onClick={() => setViewMode('SALES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'SALES' ? 'bg-white text-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.3)] border-yellow-500/50' : 'text-slate-500 hover:text-slate-700'}`}>Ventes (Amazon)</button>
+            <button onClick={() => setViewMode('INVOICES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'INVOICES' ? 'bg-white text-purple-400 shadow-[0_0_15px_rgba(192,132,252,0.3)] border-purple-500/50' : 'text-slate-500 hover:text-slate-700'}`}>Factures Amazon (PDF)</button>
           </div>
 
           <div className="flex gap-2">
+            <button onClick={() => setShowRulesModal(true)} className="px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md">
+               Règles ({rules.length})
+            </button>
             {hasData && (
               <>
               <button onClick={handleDownloadPDF} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white border rounded shadow-sm ${viewMode === 'EXPENSES' ? 'bg-sky-600 border-sky-600 hover:bg-sky-700' : viewMode === 'SALES' ? 'bg-yellow-500 border-yellow-500 hover:bg-yellow-600' : 'bg-purple-600 border-purple-600 hover:bg-purple-700'}`}>
@@ -603,7 +741,7 @@ function App() {
               </div>
               {viewMode === 'INVOICES' && (
                  <div className="text-right">
-                   <div className="text-xs uppercase text-slate-400 font-bold tracking-wider">Total Frais Détectés</div>
+                   <div className="text-xs uppercase text-slate-500 font-bold tracking-wider">Total Frais Détectés</div>
                    <div className="text-2xl font-bold text-purple-600">{currency.format(invoicesStats.grandTotalHT)} HT</div>
                    <div className="text-sm text-slate-500">TVA: {currency.format(invoicesStats.grandTotalTVA)}</div>
                  </div>
@@ -613,31 +751,54 @@ function App() {
             {/* EXPENSES DASHBOARD (CSV) */}
             {viewMode === 'EXPENSES' && (
               <>
-                <div className="grid grid-cols-4 gap-4 mb-8">
+                <div className="grid grid-cols-5 gap-4 mb-4">
                   <div className="flex flex-col gap-2">
-                    <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 px-1">Consommable</h2>
+                    <h2 className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1 px-1">À classer</h2>
+                    <SummaryCard variant="slate" title="Non reconnu" amountHT={expenseStats.uncategorized.normal.ht + expenseStats.uncategorized.auto.ht} amountTVA={expenseStats.uncategorized.normal.tva + expenseStats.uncategorized.auto.tva} count={expenseStats.uncategorized.normal.count + expenseStats.uncategorized.auto.count} isActive={activeFilter?.cat === ExpenseCategory.UNCATEGORIZED} onClick={() => toggleFilter(ExpenseCategory.UNCATEGORIZED)} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Consommable</h2>
                     <SummaryCard variant="blue-normal" title="TVA Payée" amountHT={expenseStats.consommable.normal.ht} amountTVA={expenseStats.consommable.normal.tva} count={expenseStats.consommable.normal.count} isActive={activeFilter?.cat === ExpenseCategory.CONSUMABLE && activeFilter?.mode === TaxMode.NORMAL} onClick={() => toggleFilter(ExpenseCategory.CONSUMABLE, TaxMode.NORMAL)} />
                     <SummaryCard variant="blue-auto" title="Autoliquidation" amountHT={expenseStats.consommable.auto.ht} amountTVA={expenseStats.consommable.auto.tva} count={expenseStats.consommable.auto.count} isActive={activeFilter?.cat === ExpenseCategory.CONSUMABLE && activeFilter?.mode === TaxMode.AUTOLIQUIDATION} onClick={() => toggleFilter(ExpenseCategory.CONSUMABLE, TaxMode.AUTOLIQUIDATION)} />
                   </div>
                   <div className="flex flex-col gap-2">
-                    <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 px-1">Service</h2>
+                    <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Service</h2>
                     <SummaryCard variant="pink-normal" title="TVA Payée" amountHT={expenseStats.service.normal.ht} amountTVA={expenseStats.service.normal.tva} count={expenseStats.service.normal.count} isActive={activeFilter?.cat === ExpenseCategory.SERVICE && activeFilter?.mode === TaxMode.NORMAL} onClick={() => toggleFilter(ExpenseCategory.SERVICE, TaxMode.NORMAL)} />
                     <SummaryCard variant="pink-auto" title="Autoliquidation" amountHT={expenseStats.service.auto.ht} amountTVA={expenseStats.service.auto.tva} count={expenseStats.service.auto.count} isActive={activeFilter?.cat === ExpenseCategory.SERVICE && activeFilter?.mode === TaxMode.AUTOLIQUIDATION} onClick={() => toggleFilter(ExpenseCategory.SERVICE, TaxMode.AUTOLIQUIDATION)} />
                   </div>
                   <div className="flex flex-col gap-2">
-                    <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 px-1">Immobilisation</h2>
+                    <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Immobilisation</h2>
                     <SummaryCard variant="green-normal" title="TVA Payée" amountHT={expenseStats.asset.normal.ht} amountTVA={expenseStats.asset.normal.tva} count={expenseStats.asset.normal.count} isActive={activeFilter?.cat === ExpenseCategory.ASSET && activeFilter?.mode === TaxMode.NORMAL} onClick={() => toggleFilter(ExpenseCategory.ASSET, TaxMode.NORMAL)} />
                     <SummaryCard variant="green-auto" title="Autoliquidation" amountHT={expenseStats.asset.auto.ht} amountTVA={expenseStats.asset.auto.tva} count={expenseStats.asset.auto.count} isActive={activeFilter?.cat === ExpenseCategory.ASSET && activeFilter?.mode === TaxMode.AUTOLIQUIDATION} onClick={() => toggleFilter(ExpenseCategory.ASSET, TaxMode.AUTOLIQUIDATION)} />
                   </div>
                   <div className="flex flex-col gap-2">
-                    <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 px-1">Ignorés</h2>
+                    <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Ignorés</h2>
                     <SummaryCard variant="slate" title="Total Ignoré" amountHT={expenseStats.ignored.ht} amountTVA={expenseStats.ignored.tva} count={expenseStats.ignored.count} isActive={activeFilter?.cat === ExpenseCategory.IGNORED} onClick={() => toggleFilter(ExpenseCategory.IGNORED)} />
                   </div>
                 </div>
 
+                {hasData && (
+                  <div className="flex justify-between items-center mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg shadow-sm">
+                     <div className="flex gap-2">
+                        <button 
+                           onClick={categorizeWithAI} 
+                           disabled={isAiLoading || (expenseStats.uncategorized.normal.count + expenseStats.uncategorized.auto.count === 0)}
+                           className={`flex items-center gap-2 px-4 py-2 text-sm font-bold text-white rounded-lg shadow-sm transition-all
+                              ${isAiLoading ? 'bg-slate-400 cursor-wait' : 
+                              (expenseStats.uncategorized.normal.count + expenseStats.uncategorized.auto.count > 0) ? 'bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 hover:-translate-y-0.5' : 'bg-slate-300 opacity-50 cursor-not-allowed'}`}
+                        >
+                           {isAiLoading ? 'Analyse en cours...' : '✨ Catégoriser avec l\'IA'}
+                        </button>
+                     </div>
+                     <button onClick={memorizeAll} className="px-4 py-2 text-sm font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg shadow-sm">
+                        💾 Tout Mémoriser
+                     </button>
+                  </div>
+                )}
+
                 <div className="border-t pt-4">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-800 text-slate-100 uppercase border-b border-slate-200">
+                    <thead className="bg-slate-800 text-slate-900 uppercase border-b border-slate-200">
                       <tr>
                         <th className="px-3 py-3 w-24">Date</th>
                         <th className="px-3 py-3 w-48">Justificatif</th>
@@ -651,7 +812,7 @@ function App() {
                     </thead>
                     <tbody>
                       {filteredTransactions.map((t) => (
-                          <tr key={t.id} className={`${getRowColor(t, t.category === ExpenseCategory.IGNORED)} border-b border-white/40`}>
+                          <tr key={t.id} className={`${getRowColor(t, t.category === ExpenseCategory.IGNORED)} border-b border-slate-200`}>
                             <td className="px-3 py-2 font-mono whitespace-nowrap opacity-80">{t.date}</td>
                             <td className="px-3 py-2">{t.invoiceTitle || <span className="opacity-30">-</span>}</td>
                             <td className="px-3 py-2 font-bold truncate max-w-[180px]">{t.counterparty}</td>
@@ -660,12 +821,18 @@ function App() {
                             <td className="px-3 py-2 text-right opacity-70">{currency.format(t.totalAmount)}</td>
                             <td className="px-3 py-2">
                               {isPdfMode ? t.category : (
-                                <select value={t.category} onChange={(e) => updateTransaction(t.id, 'category', e.target.value)} className="bg-white/50 border rounded px-1 py-1 text-[10px] w-full">
-                                  <option value={ExpenseCategory.CONSUMABLE}>Conso.</option>
-                                  <option value={ExpenseCategory.SERVICE}>Service</option>
-                                  <option value={ExpenseCategory.ASSET}>Immo.</option>
-                                  <option value={ExpenseCategory.IGNORED}>Ignoré</option>
-                                </select>
+                                <div className="flex flex-col gap-1">
+                                  <select value={t.category} onChange={(e) => updateTransaction(t.id, 'category', e.target.value)} className={`bg-white/50 border rounded px-1 py-1 text-[10px] w-full ${t.category === ExpenseCategory.UNCATEGORIZED ? 'border-orange-400 text-orange-700 font-bold' : ''}`}>
+                                    <option value={ExpenseCategory.UNCATEGORIZED}>À classer</option>
+                                    <option value={ExpenseCategory.CONSUMABLE}>Conso.</option>
+                                    <option value={ExpenseCategory.SERVICE}>Service</option>
+                                    <option value={ExpenseCategory.ASSET}>Immo.</option>
+                                    <option value={ExpenseCategory.IGNORED}>Ignoré</option>
+                                  </select>
+                                  {t.category !== ExpenseCategory.UNCATEGORIZED && (
+                                    <button onClick={() => addRule(t.counterparty, t.category, t.taxMode)} className="text-[9px] text-sky-600 hover:text-sky-800 text-left underline">Mémoriser</button>
+                                  )}
+                                </div>
                               )}
                             </td>
                             <td className="px-3 py-2">
@@ -705,8 +872,8 @@ function App() {
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">TVA Collectée</p>
                        <p className="text-xl font-bold text-slate-700 my-1">{currency.format(salesStats.totalTVA)}</p>
-                       <p className="text-[10px] text-slate-400 font-medium">{getPercentageOfCA(salesStats.totalTVA)} du CA TTC</p>
-                       <p className="text-[8px] text-slate-300 mt-1 italic">(Normal: 16.6% du TTC = 20% du HT)</p>
+                       <p className="text-[10px] text-slate-500 font-medium">{getPercentageOfCA(salesStats.totalTVA)} du CA TTC</p>
+                       <p className="text-[8px] text-slate-700 mt-1 italic">(Normal: 16.6% du TTC = 20% du HT)</p>
                     </div>
                     <div className="bg-red-50 p-4 rounded-xl border border-red-200 shadow-sm flex flex-col items-center justify-center text-center">
                        <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest mb-1">Remboursements</p>
@@ -716,7 +883,7 @@ function App() {
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Frais Amazon</p>
                        <p className="text-xl font-bold text-slate-700 my-1">{currency.format(salesStats.fraisAmazon)}</p>
-                       <p className="text-[10px] text-slate-400 font-medium">{getPercentageOfCA(salesStats.fraisAmazon)} du CA TTC</p>
+                       <p className="text-[10px] text-slate-500 font-medium">{getPercentageOfCA(salesStats.fraisAmazon)} du CA TTC</p>
                     </div>
                     <div className="bg-green-50 p-4 rounded-xl border border-green-200 shadow-sm flex flex-col items-center justify-center text-center relative overflow-hidden">
                        <div className="absolute top-0 left-0 w-full h-1 bg-green-400"></div>
@@ -736,25 +903,25 @@ function App() {
                        <AlertTriangle className="text-yellow-400" size={20} />
                        <h3 className="text-sm font-bold uppercase tracking-wide">Aide à la déclaration TVA (Formulaire CA3)</h3>
                     </div>
-                    <p className="text-xs text-slate-400 mb-6 italic">Utilisez ces montants HT pour remplir vos cases de déclaration. Cela évite de payer 20% sur vos ventes export/UE.</p>
+                    <p className="text-xs text-slate-500 mb-6 italic">Utilisez ces montants HT pour remplir vos cases de déclaration. Cela évite de payer 20% sur vos ventes export/UE.</p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                        <div className="bg-slate-700/50 p-4 rounded-lg border border-slate-600">
                           <div className="flex justify-between items-start mb-2">
                              <span className="bg-sky-500 text-[10px] font-bold px-1.5 py-0.5 rounded">Case A1</span>
-                             <span className="text-[10px] text-slate-400 uppercase font-bold">Ventes France</span>
+                             <span className="text-[10px] text-slate-500 uppercase font-bold">Ventes France</span>
                           </div>
                           <p className="text-xl font-mono font-bold text-sky-300">{currency.format(ca3Summary.A1)}</p>
-                          <p className="text-[10px] text-slate-400 mt-1">Soumis à 20% de TVA</p>
+                          <p className="text-[10px] text-slate-500 mt-1">Soumis à 20% de TVA</p>
                        </div>
 
                        <div className="bg-slate-700/50 p-4 rounded-lg border border-slate-600">
                           <div className="flex justify-between items-start mb-2">
                              <span className="bg-emerald-500 text-[10px] font-bold px-1.5 py-0.5 rounded">Case F2</span>
-                             <span className="text-[10px] text-slate-400 uppercase font-bold">Ventes UE / Export</span>
+                             <span className="text-[10px] text-slate-500 uppercase font-bold">Ventes UE / Export</span>
                           </div>
                           <p className="text-xl font-mono font-bold text-emerald-300">{currency.format(ca3Summary.F2)}</p>
-                          <p className="text-[10px] text-slate-400 mt-1">TVA à 0% (Intracommunautaire / Export)</p>
+                          <p className="text-[10px] text-slate-500 mt-1">TVA à 0% (Intracommunautaire / Export)</p>
                        </div>
                     </div>
                  </div>
@@ -774,35 +941,35 @@ function App() {
                           <p className="text-xs text-slate-500 font-medium">Frais de vente (Commissions)</p>
                           <div className="text-right">
                             <p className="text-sm font-bold text-slate-700">{currency.format(salesStats.fraisVente)}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">{getPercentageOfCA(salesStats.fraisVente)} du CA TTC</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{getPercentageOfCA(salesStats.fraisVente)} du CA TTC</p>
                           </div>
                        </div>
                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <p className="text-xs text-slate-500 font-medium">Frais d'expédition (FBA)</p>
                           <div className="text-right">
                             <p className="text-sm font-bold text-slate-700">{currency.format(salesStats.fraisFBA)}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">{getPercentageOfCA(salesStats.fraisFBA)} du CA TTC</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{getPercentageOfCA(salesStats.fraisFBA)} du CA TTC</p>
                           </div>
                        </div>
                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <p className="text-xs text-slate-500 font-medium">Autres frais de transaction</p>
                           <div className="text-right">
                             <p className="text-sm font-bold text-slate-700">{currency.format(salesStats.autresFrais)}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">{getPercentageOfCA(salesStats.autresFrais)} du CA TTC</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{getPercentageOfCA(salesStats.autresFrais)} du CA TTC</p>
                           </div>
                        </div>
                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <p className="text-xs text-slate-500 font-medium">Frais de service (Publicité, etc.)</p>
                           <div className="text-right">
                             <p className="text-sm font-bold text-slate-700">{currency.format(salesStats.fraisService)}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">{getPercentageOfCA(salesStats.fraisService)} du CA TTC</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{getPercentageOfCA(salesStats.fraisService)} du CA TTC</p>
                           </div>
                        </div>
                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <p className="text-xs text-slate-500 font-medium">Frais de stockage FBA</p>
                           <div className="text-right">
                             <p className="text-sm font-bold text-slate-700">{currency.format(salesStats.fraisStock)}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">{getPercentageOfCA(salesStats.fraisStock)} du CA TTC</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{getPercentageOfCA(salesStats.fraisStock)} du CA TTC</p>
                           </div>
                        </div>
                        <div 
@@ -812,11 +979,11 @@ function App() {
                           <div className="flex items-center justify-between w-full">
                             <div className="flex items-center gap-2">
                               <p className="text-xs text-slate-500 font-medium">Ajustements & Soldes</p>
-                              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showAdjustments ? 'rotate-180' : ''}`} />
+                              <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${showAdjustments ? 'rotate-180' : ''}`} />
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-bold text-slate-700">{currency.format(salesStats.fraisAjustement)}</p>
-                              <p className="text-[10px] text-slate-400 font-medium">{getPercentageOfCA(salesStats.fraisAjustement)} du CA TTC</p>
+                              <p className="text-[10px] text-slate-500 font-medium">{getPercentageOfCA(salesStats.fraisAjustement)} du CA TTC</p>
                             </div>
                           </div>
                           
@@ -826,7 +993,7 @@ function App() {
                                 {adjustmentsList.map((adj, i) => (
                                   <li key={i} className="flex justify-between items-start text-[10px]">
                                     <div className="flex flex-col">
-                                      <span className="text-slate-600 font-medium">{adj.date} {adj.orderId !== 'N/A' ? `- ${adj.orderId}` : ''}</span>
+                                      <span className="text-slate-700 font-medium">{adj.date} {adj.orderId !== 'N/A' ? `- ${adj.orderId}` : ''}</span>
                                       <span className="text-slate-500">{simplifyAdjustmentDescription(adj.productName)}</span>
                                     </div>
                                     <span className={`font-bold whitespace-nowrap ml-2 ${adj.total > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -886,7 +1053,7 @@ function App() {
                                 <tr key={idx} className="hover:bg-slate-50">
                                   <td className="px-3 py-2 font-bold text-slate-800">{fam.name}</td>
                                   <td className="px-3 py-2 text-center font-medium text-slate-700">{fam.netQuantity}</td>
-                                  <td className="px-3 py-2 text-right text-slate-600">{currency.format(fam.caHT)}</td>
+                                  <td className="px-3 py-2 text-right text-slate-700">{currency.format(fam.caHT)}</td>
                                   <td className={`px-3 py-2 text-right font-bold ${fam.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                                      {currency.format(fam.netProfit)}
                                   </td>
@@ -1006,18 +1173,18 @@ function App() {
                      <table className="w-full text-left border-collapse">
                        <thead>
                          <tr className="border-b border-slate-200">
-                           <th className="py-2 text-xs font-bold text-slate-600">Date</th>
-                           <th className="py-2 text-xs font-bold text-slate-600">Commande</th>
-                           <th className="py-2 text-xs font-bold text-slate-600">Description</th>
-                           <th className="py-2 text-right text-xs font-bold text-slate-600">Montant</th>
+                           <th className="py-2 text-xs font-bold text-slate-700">Date</th>
+                           <th className="py-2 text-xs font-bold text-slate-700">Commande</th>
+                           <th className="py-2 text-xs font-bold text-slate-700">Description</th>
+                           <th className="py-2 text-right text-xs font-bold text-slate-700">Montant</th>
                          </tr>
                        </thead>
                        <tbody>
                          {adjustmentsList.map((adj, i) => (
                            <tr key={i} className="border-b border-slate-100">
-                             <td className="py-2 text-xs text-slate-600">{adj.date}</td>
-                             <td className="py-2 text-xs text-slate-600">{adj.orderId !== 'N/A' ? adj.orderId : '-'}</td>
-                             <td className="py-2 text-xs text-slate-600">{simplifyAdjustmentDescription(adj.productName)}</td>
+                             <td className="py-2 text-xs text-slate-700">{adj.date}</td>
+                             <td className="py-2 text-xs text-slate-700">{adj.orderId !== 'N/A' ? adj.orderId : '-'}</td>
+                             <td className="py-2 text-xs text-slate-700">{simplifyAdjustmentDescription(adj.productName)}</td>
                              <td className={`py-2 text-right text-xs font-bold ${adj.total > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                                {adj.total > 0 ? '+' : ''}{currency.format(adj.total)}
                              </td>
@@ -1069,7 +1236,7 @@ function App() {
                     <tbody className="divide-y divide-slate-100">
                       {invoices.map((inv) => (
                         <tr key={inv.id} className="hover:bg-purple-50 even:bg-slate-50">
-                          <td className="px-3 py-2 font-mono text-slate-600">{inv.date}</td>
+                          <td className="px-3 py-2 font-mono text-slate-700">{inv.date}</td>
                           <td className="px-3 py-2 font-medium text-slate-800 max-w-[200px] truncate" title={inv.filename}>{inv.filename}</td>
                           <td className="px-3 py-2">
                             <span className={`px-2 py-1 rounded-full text-[10px] border ${
@@ -1097,6 +1264,50 @@ function App() {
             )}
         </div>
       </div>
+      )}
+      {/* RULES MODAL */}
+      {showRulesModal && (
+        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-800">Règles de catégorisation ({rules.length})</h2>
+              <button onClick={() => setShowRulesModal(false)} className="text-slate-500 hover:text-slate-700">✕</button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              {rules.length === 0 ? (
+                <p className="text-center text-slate-500 py-8">Aucune règle personnalisée.<br/>Modifiez une catégorie dans le tableau et cliquez sur "Mémoriser" pour en ajouter.</p>
+              ) : (
+                <table className="w-full text-left text-sm">
+                  <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-2">Mot-clé (Contient)</th>
+                      <th className="px-4 py-2">Catégorie cible</th>
+                      <th className="px-4 py-2">TVA</th>
+                      <th className="px-4 py-2 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rules.map(r => (
+                      <tr key={r.id} className="border-b">
+                        <td className="px-4 py-2 font-bold text-slate-700">{r.keyword}</td>
+                        <td className="px-4 py-2">
+                           <span className="bg-slate-100 px-2 py-1 rounded text-xs">{r.category}</span>
+                        </td>
+                        <td className="px-4 py-2 text-xs">{r.taxMode}</td>
+                        <td className="px-4 py-2 text-right">
+                          <button onClick={() => removeRule(r.id)} className="text-red-500 hover:text-red-700 text-xs font-bold">Supprimer</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+               <p className="text-xs text-slate-500">Les règles sont appliquées automatiquement lors de l'import d'un nouveau fichier CSV. Elles sont sauvegardées dans votre dossier OneDrive et partagées avec vos autres appareils.</p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

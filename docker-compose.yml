@@ -4,4 +4,8 @@ services:
     container_name: compta-tva-app
     ports:
       - "3000:80"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
