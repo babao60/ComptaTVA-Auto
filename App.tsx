@@ -6,9 +6,9 @@ import { analyzeBatchInvoices } from './utils/pdfParser'; // Import de la nouvel
 import { Transaction, ExpenseCategory, TaxMode, AmazonSale, InvoiceData, InvoiceCategoryType, InvoiceSummary, CustomRule } from './types';
 import { SummaryCard } from './components/SummaryCard';
 import { FileUploader } from './components/FileUploader';
-import { FileSpreadsheet, RotateCcw, Download, FileText, ShoppingCart, CreditCard, TrendingUp, ExternalLink, Files, AlertTriangle, ChevronDown } from 'lucide-react';
+import { FileSpreadsheet, RotateCcw, Download, FileText, ShoppingCart, CreditCard, TrendingUp, ExternalLink, Files, AlertTriangle, ChevronDown, Settings, RefreshCw, HardDrive, Server } from 'lucide-react';
 
-type ViewMode = 'EXPENSES' | 'SALES' | 'INVOICES';
+type ViewMode = 'EXPENSES' | 'SALES' | 'INVOICES' | 'MEMO';
 
 // Declaration for the html2pdf library loaded via script tag
 declare var html2pdf: any;
@@ -204,6 +204,23 @@ function App() {
       alert(`Erreur avec l'IA: ${error.message}`);
     } finally {
       setIsAiLoading(false);
+    }
+  };
+
+  const downloadRules = async () => {
+    try {
+      const response = await fetch('/api/rules');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'rules.json';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert("Erreur lors du téléchargement des règles.");
     }
   };
 
@@ -607,7 +624,8 @@ function App() {
 
   const hasData = viewMode === 'EXPENSES' ? transactions.length > 0 
                 : viewMode === 'SALES' ? sales.length > 0
-                : invoices.length > 0;
+                : viewMode === 'INVOICES' ? invoices.length > 0
+                : true;
 
   const getPercentageOfCA = (amount: number) => {
     if (!salesStats.totalTTC) return '0.0%';
@@ -670,7 +688,10 @@ function App() {
           <div className="flex items-center bg-slate-100 p-1 rounded-lg">
             <button onClick={() => setViewMode('EXPENSES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'EXPENSES' ? 'bg-white text-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.3)] border-sky-500/50' : 'text-slate-500 hover:text-slate-700'}`}>Dépenses (CSV)</button>
             <button onClick={() => setViewMode('SALES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'SALES' ? 'bg-white text-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.3)] border-yellow-500/50' : 'text-slate-500 hover:text-slate-700'}`}>Ventes (Amazon)</button>
-            <button onClick={() => setViewMode('INVOICES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'INVOICES' ? 'bg-white text-purple-400 shadow-[0_0_15px_rgba(192,132,252,0.3)] border-purple-500/50' : 'text-slate-500 hover:text-slate-700'}`}>Factures Amazon (PDF)</button>
+            <button onClick={() => setViewMode('INVOICES')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'INVOICES' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Factures Amazon (PDF)</button>
+            <button onClick={() => setViewMode('MEMO')} className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'MEMO' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+               <Settings size={16} /> Mémos & Sauvegarde
+            </button>
           </div>
 
           <div className="flex gap-2">
@@ -701,11 +722,13 @@ function App() {
               {viewMode === 'EXPENSES' && 'Analysez vos dépenses bancaires'}
               {viewMode === 'SALES' && 'Calculez votre CA Amazon'}
               {viewMode === 'INVOICES' && 'Analysez vos Factures Amazon'}
+              {viewMode === 'MEMO' && 'Paramètres, Sauvegarde & Mémos'}
             </h2>
             <p className="text-slate-500 max-w-md mb-8">
               {viewMode === 'EXPENSES' && "Importez votre CSV bancaire pour catégoriser vos achats."}
               {viewMode === 'SALES' && "Importez votre rapport de transactions Amazon (.csv)."}
               {viewMode === 'INVOICES' && "Sélectionnez plusieurs factures PDF (Amazon, Chronopost, REP...) pour extraire les montants HT/TVA automatiquement."}
+              {viewMode === 'MEMO' && "Toutes les commandes pour gérer, mettre à jour et sauvegarder votre outil."}
             </p>
             
             {viewMode === 'SALES' && (
@@ -735,6 +758,7 @@ function App() {
                   {viewMode === 'EXPENSES' && 'Synthèse Dépenses & TVA'}
                   {viewMode === 'SALES' && 'Justificatif de Recettes'}
                   {viewMode === 'INVOICES' && 'Synthèse Factures Fournisseurs'}
+                  {viewMode === 'MEMO' && 'Documentation Technique'}
                   <span className={`${viewMode === 'EXPENSES' ? 'text-sky-600' : viewMode === 'SALES' ? 'text-yellow-600' : 'text-purple-600'} ml-2`}>{dateInfo.displayTitle}</span>
                 </h1>
                 <p className="text-sm text-gray-500 mt-1">Généré le {new Date().toLocaleDateString()}</p>
@@ -1260,6 +1284,80 @@ function App() {
                       ))}
                     </tbody>
                  </table>
+              </div>
+            )}
+
+            {/* MEMOS DASHBOARD */}
+            {viewMode === 'MEMO' && (
+              <div className="pt-4">
+                
+                {/* DEPLOYMENT SECTION */}
+                <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                  <RefreshCw size={24} className="text-indigo-500" /> Cycle de Déploiement
+                </h3>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
+                  {/* PC to GIT */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <h4 className="font-bold text-slate-700 mb-2 flex items-center gap-2">
+                      <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span> 
+                      Du PC vers Git (Sauvegarde Code)
+                    </h4>
+                    <p className="text-sm text-slate-500 mb-4">Ouvrez une Invite de Commande ou PowerShell sur votre PC. Il faut d'abord se placer dans le bon dossier avant de sauvegarder :</p>
+                    <div className="bg-slate-900 text-slate-300 p-4 rounded-lg font-mono text-xs mb-4 overflow-x-auto whitespace-pre">
+{`# 1. Aller sur le disque D: et se placer dans le dossier
+d:
+cd "D:\\OneDrive\\Documents\\1. Projets & Création\\3DMatch\\01 - Administration\\Docker_compta\\ComptaTVA-Auto"
+
+# 2. Sauvegarder et envoyer vers Git
+git add .
+git commit -m "Mise à jour"
+git push origin master`}
+                    </div>
+                    <a href="https://github.com/babao60/ComptaTVA-Auto" target="_blank" rel="noreferrer" className="text-sm text-slate-600 hover:text-indigo-600 flex items-center gap-2 font-medium">
+                      <ExternalLink size={16} /> Voir le projet sur GitHub
+                    </a>
+                  </div>
+
+                  {/* GIT to NAS */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <h4 className="font-bold text-slate-700 mb-2 flex items-center gap-2">
+                      <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span> 
+                      De Git vers NAS (Mise en ligne)
+                    </h4>
+                    <p className="text-sm text-slate-500 mb-4">Connectez-vous en SSH sur votre NAS pour récupérer le code et redémarrer l'application :</p>
+                    <div className="bg-slate-900 text-slate-300 p-4 rounded-lg font-mono text-xs mb-4 overflow-x-auto whitespace-pre">
+{`cd /volume1/@appdata/ContainerManager/all_shares/docker/ComptaTVA-Auto
+git pull origin master
+sudo docker compose build
+sudo docker compose up -d`}
+                    </div>
+                    <p className="text-xs text-slate-500 italic bg-slate-50 p-2 rounded">Astuce : Si le port est bloqué, modifiez le fichier <code className="bg-slate-200 px-1 rounded">docker-compose.yml</code>.</p>
+                  </div>
+                </div>
+
+                {/* DATA BACKUP SECTION */}
+                <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                  <HardDrive size={24} className="text-emerald-500" /> Sauvegarde des Données (Règles IA)
+                </h3>
+                
+                <p className="text-slate-600 mb-6 max-w-3xl">Votre code source est en sécurité sur Git, mais <strong>vos règles personnalisées sont stockées uniquement sur votre NAS</strong>. Il est fortement recommandé de télécharger régulièrement une copie de votre base de données de règles.</p>
+                
+                <button onClick={downloadRules} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-6 rounded-lg shadow-sm flex items-center gap-2 mb-8 transition-colors">
+                  <Download size={20} /> Télécharger rules.json
+                </button>
+
+                <div className="bg-slate-800 text-slate-200 p-6 rounded-xl border border-slate-700 shadow-md">
+                  <h4 className="font-bold text-lg text-white mb-4">Comment restaurer l'application en cas de problème ?</h4>
+                  <ol className="list-decimal pl-5 space-y-3 text-sm text-slate-300 mb-6">
+                    <li>Installez le dossier de l'application (depuis Git) sur votre nouveau NAS.</li>
+                    <li>Créez un fichier <code className="bg-slate-900 px-1 rounded text-pink-400">.env</code> avec votre clé `GEMINI_API_KEY`.</li>
+                    <li>Placez le fichier <code className="bg-slate-900 px-1 rounded text-emerald-400">rules.json</code> que vous avez téléchargé dans le sous-dossier <code className="bg-slate-900 px-1 rounded text-emerald-400">data/</code> de l'application.</li>
+                    <li>Lancez l'application via Container Manager ou SSH : <code className="bg-slate-900 px-1 py-0.5 rounded text-white">sudo docker compose up -d</code>.</li>
+                  </ol>
+                  <p className="text-xs text-slate-400 italic">Pour automatiser ces sauvegardes, utilisez l'application <strong>Synology Hyper Backup</strong> pour sauvegarder le dossier <code className="bg-slate-900 px-1 rounded">data/</code> de l'application sur un disque dur externe ou dans le Cloud.</p>
+                </div>
+
               </div>
             )}
         </div>
