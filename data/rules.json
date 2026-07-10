@@ -112,5 +112,89 @@
     "keyword": "jerome heude",
     "category": "Ignoré",
     "taxMode": "NORMAL"
+  },
+  {
+    "id": "17837097256381072",
+    "keyword": "anthropic* claude sub",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17837097256396043",
+    "keyword": "shopify* 539587628",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17837097256392024",
+    "keyword": "sp polymaker",
+    "category": "Consommable",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17837097256393955",
+    "keyword": "ebay c 27072497075",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17837097256397781",
+    "keyword": "shopify* 543278069",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17837097256390451",
+    "keyword": "shopify* 546252318",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17837097256392758",
+    "keyword": "google*google one",
+    "category": "Service",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17837097256395932",
+    "keyword": "laboratorio geometrico s.l.",
+    "category": "Consommable",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17837097256395782",
+    "keyword": "midjourney inc.",
+    "category": "Service",
+    "taxMode": "Autoliquidation"
+  },
+  {
+    "id": "17837097256397754",
+    "keyword": "ractemfranc",
+    "category": "Immobilisation",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17837097256397909",
+    "keyword": "frais paiement hors zone euro - 2026-06-24",
+    "category": "Service",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17837097256396549",
+    "keyword": "frais paiement hors zone euro - 2026-06-27",
+    "category": "Service",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17837097256395489",
+    "keyword": "nimbanet",
+    "category": "Immobilisation",
+    "taxMode": "Normal"
+  },
+  {
+    "id": "17837097256393327",
+    "keyword": "mondial relay",
+    "category": "Service",
+    "taxMode": "Normal"
   }
 ]

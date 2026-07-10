@@ -92,8 +92,12 @@ export const parseCSV = (file: File, rules: CustomRule[] = []): Promise<Transact
           // Filter out positive amounts (Income)
           if (solde >= 0) return;
 
-          const amountHT = parseAmount(row['Montant HT']);
-          const amountTVA = parseAmount(row['Montant de TVA total']);
+          let amountHT = parseAmount(row['Montant HT']);
+          let amountTVA = parseAmount(row['Montant de TVA total']);
+          
+          if (amountHT === 0 && amountTVA === 0 && solde < 0) {
+            amountHT = Math.abs(solde);
+          }
           
           // Determine logic
           const { category, taxMode } = categorizeTransaction(row, amountTVA, amountHT, rules);
