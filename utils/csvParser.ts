@@ -100,7 +100,17 @@ export const parseCSV = (file: File, rules: CustomRule[] = []): Promise<Transact
           }
           
           // Determine logic
-          const { category, taxMode } = categorizeTransaction(row, amountTVA, amountHT, rules);
+          let { category, taxMode } = categorizeTransaction(row, amountTVA, amountHT, rules);
+          
+          // Ensure taxMode matches exactly the enum values (fix uppercase issues from rules.json)
+          if (taxMode.toUpperCase() === 'AUTOLIQUIDATION') taxMode = TaxMode.AUTOLIQUIDATION;
+          else if (taxMode.toUpperCase() === 'NORMAL') taxMode = TaxMode.NORMAL;
+
+          // If autoliquidation, out-of-pocket TVA is always 0. The total solde is the HT.
+          if (taxMode === TaxMode.AUTOLIQUIDATION) {
+            amountTVA = 0;
+            amountHT = Math.abs(solde);
+          }
 
           // Extract Invoice Title (usually Col V/W in Shine exports)
           // Added 'Pièces' as requested by user

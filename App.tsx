@@ -100,9 +100,17 @@ function App() {
   };
 
   const updateTransaction = (id: string, field: keyof Transaction, value: any) => {
-    setTransactions(prev => prev.map(t => 
-      t.id === id ? { ...t, [field]: value } : t
-    ));
+    setTransactions(prev => prev.map(t => {
+      if (t.id === id) {
+        const updated = { ...t, [field]: value };
+        if (field === 'taxMode' && value === TaxMode.AUTOLIQUIDATION) {
+          updated.amountTVA = 0;
+          updated.amountHT = t.totalAmount;
+        }
+        return updated;
+      }
+      return t;
+    }));
   };
 
   const toggleFilter = (cat: ExpenseCategory, mode?: TaxMode) => {
