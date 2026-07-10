@@ -1401,10 +1401,10 @@ sudo docker compose up -d`}
                   </thead>
                   <tbody>
                     {rules.map(r => (
-                      <tr key={r.id} className="border-b">
+                      <tr key={r.id} className={`border-b border-slate-200 ${getRowColor(r as any, r.category === ExpenseCategory.IGNORED)}`}>
                         <td className="px-4 py-2 font-bold text-slate-700">{r.keyword}</td>
                         <td className="px-4 py-2">
-                          <select value={r.category} onChange={(e) => updateRule(r.id, 'category', e.target.value)} className="bg-white border border-slate-300 rounded px-2 py-1 text-xs w-full">
+                          <select value={r.category} onChange={(e) => updateRule(r.id, 'category', e.target.value)} className={`bg-white/50 border rounded px-2 py-1 text-xs w-full ${r.category === ExpenseCategory.UNCATEGORIZED ? 'border-orange-400 text-orange-700 font-bold' : 'border-slate-300'}`}>
                             <option value={ExpenseCategory.UNCATEGORIZED}>À classer</option>
                             <option value={ExpenseCategory.CONSUMABLE}>Conso.</option>
                             <option value={ExpenseCategory.SERVICE}>Service</option>
@@ -1413,7 +1413,7 @@ sudo docker compose up -d`}
                           </select>
                         </td>
                         <td className="px-4 py-2">
-                          <select value={r.taxMode} onChange={(e) => updateRule(r.id, 'taxMode', e.target.value)} className="bg-white border border-slate-300 rounded px-2 py-1 text-xs w-full">
+                          <select value={r.taxMode} onChange={(e) => updateRule(r.id, 'taxMode', e.target.value)} className="bg-white/50 border border-slate-300 rounded px-2 py-1 text-xs w-full">
                             <option value={TaxMode.NORMAL}>Normal</option>
                             <option value={TaxMode.AUTOLIQUIDATION}>Autoliq.</option>
                           </select>
