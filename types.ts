@@ -11,7 +11,7 @@ export interface CustomRule {
   id: string;
   keyword: string;
   category: ExpenseCategory;
-  taxMode: TaxMode;
+  taxMode?: TaxMode; // Rendue optionnelle, ignorée par la nouvelle logique
 }
 
 export enum TaxMode {

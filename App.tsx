@@ -100,17 +100,9 @@ function App() {
   };
 
   const updateTransaction = (id: string, field: keyof Transaction, value: any) => {
-    setTransactions(prev => prev.map(t => {
-      if (t.id === id) {
-        const updated = { ...t, [field]: value };
-        if (field === 'taxMode' && value === TaxMode.AUTOLIQUIDATION) {
-          updated.amountTVA = 0;
-          updated.amountHT = t.totalAmount;
-        }
-        return updated;
-      }
-      return t;
-    }));
+    setTransactions(prev => prev.map(t => 
+      t.id === id ? { ...t, [field]: value } : t
+    ));
   };
 
   const toggleFilter = (cat: ExpenseCategory, mode?: TaxMode) => {
@@ -121,26 +113,25 @@ function App() {
     }
   };
 
-  const addRule = (keyword: string, category: ExpenseCategory, taxMode: TaxMode) => {
+  const addRule = (keyword: string, category: ExpenseCategory) => {
     const kw = keyword.toLowerCase();
     const existingIndex = rules.findIndex(r => r.keyword === kw);
     
     let newRules;
     if (existingIndex >= 0) {
       newRules = [...rules];
-      newRules[existingIndex] = { ...newRules[existingIndex], category, taxMode };
+      newRules[existingIndex] = { ...newRules[existingIndex], category };
     } else {
       newRules = [...rules, {
         id: Date.now().toString(),
         keyword: kw,
-        category,
-        taxMode
+        category
       }];
     }
     
     setRules(newRules);
     saveRulesToApi(newRules);
-    alert(`Règle ${existingIndex >= 0 ? 'mise à jour' : 'ajoutée'} : "${keyword}" sera maintenant classé en ${category} (${taxMode})`);
+    alert(`Règle ${existingIndex >= 0 ? 'mise à jour' : 'ajoutée'} : "${keyword}" sera maintenant classé en ${category}`);
   };
 
   const removeRule = (id: string) => {
@@ -877,18 +868,13 @@ function App() {
                                     <option value={ExpenseCategory.IGNORED}>Ignoré</option>
                                   </select>
                                   {t.category !== ExpenseCategory.UNCATEGORIZED && (
-                                    <button onClick={() => addRule(t.counterparty, t.category, t.taxMode)} className="text-[9px] text-sky-600 hover:text-sky-800 text-left underline">Mémoriser</button>
+                                    <button onClick={() => addRule(t.counterparty, t.category)} className="text-[9px] text-sky-600 hover:text-sky-800 text-left underline">Mémoriser</button>
                                   )}
                                 </div>
                               )}
                             </td>
-                            <td className="px-3 py-2">
-                               {isPdfMode ? (t.taxMode === TaxMode.AUTOLIQUIDATION ? 'Autoliq.' : 'Normal') : (
-                                <select value={t.taxMode} onChange={(e) => updateTransaction(t.id, 'taxMode', e.target.value)} className="bg-white/50 border rounded px-1 py-1 text-[10px] w-full">
-                                  <option value={TaxMode.NORMAL}>Normal</option>
-                                  <option value={TaxMode.AUTOLIQUIDATION}>Autoliq.</option>
-                                </select>
-                              )}
+                            <td className="px-3 py-2 text-xs opacity-70 font-semibold">
+                               {t.taxMode === TaxMode.AUTOLIQUIDATION ? 'Autoliq.' : 'Normal'}
                             </td>
                           </tr>
                       ))}
@@ -1403,7 +1389,6 @@ sudo docker compose up -d`}
                     <tr>
                       <th className="px-4 py-2">Mot-clé (Contient)</th>
                       <th className="px-4 py-2">Catégorie cible</th>
-                      <th className="px-4 py-2">TVA</th>
                       <th className="px-4 py-2 text-right">Action</th>
                     </tr>
                   </thead>
@@ -1418,12 +1403,6 @@ sudo docker compose up -d`}
                             <option value={ExpenseCategory.SERVICE}>Service</option>
                             <option value={ExpenseCategory.ASSET}>Immo.</option>
                             <option value={ExpenseCategory.IGNORED}>Ignoré</option>
-                          </select>
-                        </td>
-                        <td className="px-4 py-2">
-                          <select value={r.taxMode} onChange={(e) => updateRule(r.id, 'taxMode', e.target.value)} className="bg-white/50 border border-slate-300 rounded px-2 py-1 text-xs w-full">
-                            <option value={TaxMode.NORMAL}>Normal</option>
-                            <option value={TaxMode.AUTOLIQUIDATION}>Autoliq.</option>
                           </select>
                         </td>
                         <td className="px-4 py-2 text-right">

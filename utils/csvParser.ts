@@ -9,7 +9,7 @@ const parseAmount = (val: string): number => {
 };
 
 // Initial Logic to guess category based on user rules
-const categorizeTransaction = (row: RawCsvRow, tva: number, amountHT: number, rules: CustomRule[]): { category: ExpenseCategory, taxMode: TaxMode } => {
+const categorizeTransaction = (row: RawCsvRow, rules: CustomRule[]): { category: ExpenseCategory } => {
   const name = (row['Nom de la contrepartie'] || '').toLowerCase();
   const desc = (row['Libellé'] || '').toLowerCase();
   const comment = (row['Commentaire'] || '').toLowerCase();
@@ -19,7 +19,7 @@ const categorizeTransaction = (row: RawCsvRow, tva: number, amountHT: number, ru
     const keyword = rule.keyword.toLowerCase();
     if (name.includes(keyword) || desc.includes(keyword)) {
       // Rule matched!
-      return { category: rule.category, taxMode: rule.taxMode };
+      return { category: rule.category };
     }
   }
 
@@ -41,18 +41,12 @@ const categorizeTransaction = (row: RawCsvRow, tva: number, amountHT: number, ru
   ];
 
   if (ignoreKeywords.some(k => name.includes(k) || desc.includes(k))) {
-    return { category: ExpenseCategory.IGNORED, taxMode: TaxMode.NORMAL };
-  }
-
-  // Check Tax Mode from comments first
-  let detectedTaxMode = tva > 0 ? TaxMode.NORMAL : TaxMode.AUTOLIQUIDATION;
-  if (comment.includes('autoliquidation') || comment.includes('non payée') || comment.includes('tva 0')) {
-    detectedTaxMode = TaxMode.AUTOLIQUIDATION;
+    return { category: ExpenseCategory.IGNORED };
   }
 
   // Check Category from comments first
   if (comment.includes('immo') || comment.includes('immobilisation')) {
-    return { category: ExpenseCategory.ASSET, taxMode: detectedTaxMode };
+    return { category: ExpenseCategory.ASSET };
   }
 
   // Rule 3: Services (Shopify, Google, Adobe, Shine, Bank fees, Mondial Relay, SendCloud)
@@ -62,18 +56,12 @@ const categorizeTransaction = (row: RawCsvRow, tva: number, amountHT: number, ru
   ];
   
   if (serviceKeywords.some(k => name.includes(k) || desc.includes(k))) {
-    return { 
-      category: ExpenseCategory.SERVICE, 
-      taxMode: detectedTaxMode 
-    };
+    return { category: ExpenseCategory.SERVICE };
   }
 
   // Rule 4: Consumables (Default for everything else like Amazon, Atome3D, 3djack, material suppliers)
   // Logic: If it's not ignored, not a service, and not explicitly marked as asset, it's a consumable.
-  return { 
-    category: ExpenseCategory.UNCATEGORIZED, 
-    taxMode: detectedTaxMode 
-  };
+  return { category: ExpenseCategory.UNCATEGORIZED };
 };
 
 export const parseCSV = (file: File, rules: CustomRule[] = []): Promise<Transaction[]> => {
@@ -99,18 +87,11 @@ export const parseCSV = (file: File, rules: CustomRule[] = []): Promise<Transact
             amountHT = Math.abs(solde);
           }
           
-          // Determine logic
-          let { category, taxMode } = categorizeTransaction(row, amountTVA, amountHT, rules);
+          // Determine category
+          const { category } = categorizeTransaction(row, rules);
           
-          // Ensure taxMode matches exactly the enum values (fix uppercase issues from rules.json)
-          if (taxMode.toUpperCase() === 'AUTOLIQUIDATION') taxMode = TaxMode.AUTOLIQUIDATION;
-          else if (taxMode.toUpperCase() === 'NORMAL') taxMode = TaxMode.NORMAL;
-
-          // If autoliquidation, out-of-pocket TVA is always 0. The total solde is the HT.
-          if (taxMode === TaxMode.AUTOLIQUIDATION) {
-            amountTVA = 0;
-            amountHT = Math.abs(solde);
-          }
+          // STRICT RULE: if tva is > 0 it is NORMAL, if tva is 0 it is AUTOLIQUIDATION
+          const taxMode = amountTVA > 0 ? TaxMode.NORMAL : TaxMode.AUTOLIQUIDATION;
 
           // Extract Invoice Title (usually Col V/W in Shine exports)
           // Added 'Pièces' as requested by user
