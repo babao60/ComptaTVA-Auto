@@ -143,6 +143,12 @@ function App() {
     }
   };
 
+  const updateRule = (id: string, field: keyof CustomRule, value: any) => {
+    const newRules = rules.map(r => r.id === id ? { ...r, [field]: value } : r);
+    setRules(newRules);
+    saveRulesToApi(newRules);
+  };
+
   const memorizeAll = () => {
     // Find all transactions that have been categorized (not UNCATEGORIZED and not IGNORED for rules?)
     // Actually, IGNORED is a valid rule category. UNCATEGORIZED is the only invalid one.
@@ -1398,9 +1404,20 @@ sudo docker compose up -d`}
                       <tr key={r.id} className="border-b">
                         <td className="px-4 py-2 font-bold text-slate-700">{r.keyword}</td>
                         <td className="px-4 py-2">
-                           <span className="bg-slate-100 px-2 py-1 rounded text-xs">{r.category}</span>
+                          <select value={r.category} onChange={(e) => updateRule(r.id, 'category', e.target.value)} className="bg-white border border-slate-300 rounded px-2 py-1 text-xs w-full">
+                            <option value={ExpenseCategory.UNCATEGORIZED}>À classer</option>
+                            <option value={ExpenseCategory.CONSUMABLE}>Conso.</option>
+                            <option value={ExpenseCategory.SERVICE}>Service</option>
+                            <option value={ExpenseCategory.ASSET}>Immo.</option>
+                            <option value={ExpenseCategory.IGNORED}>Ignoré</option>
+                          </select>
                         </td>
-                        <td className="px-4 py-2 text-xs">{r.taxMode}</td>
+                        <td className="px-4 py-2">
+                          <select value={r.taxMode} onChange={(e) => updateRule(r.id, 'taxMode', e.target.value)} className="bg-white border border-slate-300 rounded px-2 py-1 text-xs w-full">
+                            <option value={TaxMode.NORMAL}>Normal</option>
+                            <option value={TaxMode.AUTOLIQUIDATION}>Autoliq.</option>
+                          </select>
+                        </td>
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => removeRule(r.id)} className="text-red-500 hover:text-red-700 text-xs font-bold">Supprimer</button>
                         </td>
