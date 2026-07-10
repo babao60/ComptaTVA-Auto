@@ -114,16 +114,25 @@ function App() {
   };
 
   const addRule = (keyword: string, category: ExpenseCategory, taxMode: TaxMode) => {
-    const newRule: CustomRule = {
-      id: Date.now().toString(),
-      keyword: keyword.toLowerCase(),
-      category,
-      taxMode
-    };
-    const newRules = [...rules, newRule];
+    const kw = keyword.toLowerCase();
+    const existingIndex = rules.findIndex(r => r.keyword === kw);
+    
+    let newRules;
+    if (existingIndex >= 0) {
+      newRules = [...rules];
+      newRules[existingIndex] = { ...newRules[existingIndex], category, taxMode };
+    } else {
+      newRules = [...rules, {
+        id: Date.now().toString(),
+        keyword: kw,
+        category,
+        taxMode
+      }];
+    }
+    
     setRules(newRules);
     saveRulesToApi(newRules);
-    alert(`Règle ajoutée : "${keyword}" sera maintenant classé en ${category} (${taxMode})`);
+    alert(`Règle ${existingIndex >= 0 ? 'mise à jour' : 'ajoutée'} : "${keyword}" sera maintenant classé en ${category} (${taxMode})`);
   };
 
   const removeRule = (id: string) => {
